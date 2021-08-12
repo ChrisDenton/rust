@@ -16,6 +16,7 @@ use crate::mem;
 use crate::num::NonZeroI32;
 use crate::os::windows::ffi::OsStrExt;
 use crate::path::Path;
+use crate::process::CommandEnvs;
 use crate::ptr;
 use crate::sys::c;
 use crate::sys::c::NonZeroDWORD;
@@ -25,7 +26,6 @@ use crate::sys::handle::Handle;
 use crate::sys::pipe::{self, AnonPipe};
 use crate::sys::stdio;
 use crate::sys_common::mutex::StaticMutex;
-use crate::sys_common::process::CommandEnvs;
 use crate::sys_common::AsInner;
 
 use libc::{c_void, EXIT_FAILURE, EXIT_SUCCESS};
@@ -34,6 +34,7 @@ use libc::{c_void, EXIT_FAILURE, EXIT_SUCCESS};
 // Command
 ////////////////////////////////////////////////////////////////////////////////
 
+pub(crate) type CommandEnvs = crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>;
 #[derive(Clone, Debug)]
 pub struct CommandEnv {
     clear: bool,
@@ -156,20 +157,6 @@ impl PartialEq for EnvKey {
             false
         } else {
             self.cmp(other) == cmp::Ordering::Equal
-        }
-    }
-}
-impl PartialOrd<str> for EnvKey {
-    fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
-        Some(self.cmp(&EnvKey::new(other)))
-    }
-}
-impl PartialEq<str> for EnvKey {
-    fn eq(&self, other: &str) -> bool {
-        if self.os_string.len() != other.len() {
-            false
-        } else {
-            self.cmp(&EnvKey::new(other)) == cmp::Ordering::Equal
         }
     }
 }

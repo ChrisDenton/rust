@@ -106,7 +106,8 @@ mod tests;
 
 use crate::io::prelude::*;
 
-use crate::ffi::OsStr;
+use crate::collections::btree_map;
+use crate::ffi::{OsStr, OsString};
 use crate::fmt;
 use crate::fs;
 use crate::io::{self, Initializer, IoSlice, IoSliceMut};
@@ -115,8 +116,7 @@ use crate::path::Path;
 use crate::str;
 use crate::sys::pipe::{read2, AnonPipe};
 use crate::sys::process as imp;
-#[unstable(feature = "command_access", issue = "44434")]
-pub use crate::sys_common::process::CommandEnvs;
+use crate::sys::process::EnvKey;
 use crate::sys_common::{AsInner, AsInnerMut, FromInner, IntoInner};
 
 /// Representation of a running or exited child process.
@@ -2038,5 +2038,37 @@ impl Termination for ExitCode {
     #[inline]
     fn report(self) -> i32 {
         self.0.as_i32()
+    }
+}
+
+/// An iterator over the command environment variables.
+///
+/// This struct is created by
+/// [`Command::get_envs`][crate::process::Command::get_envs]. See its
+/// documentation for more.
+#[unstable(feature = "command_access", issue = "44434")]
+#[derive(Debug)]
+pub struct CommandEnvs<'a> {
+    iter: imp::CommandEnvs,
+}
+
+#[unstable(feature = "command_access", issue = "44434")]
+impl<'a> Iterator for CommandEnvs<'a> {
+    type Item = (&'a OsStr, Option<&'a OsStr>);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(key, value)| (key.as_ref(), value.as_deref()))
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+#[unstable(feature = "command_access", issue = "44434")]
+impl<'a> ExactSizeIterator for CommandEnvs<'a> {
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.iter.is_empty()
     }
 }
