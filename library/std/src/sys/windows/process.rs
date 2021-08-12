@@ -25,7 +25,7 @@ use crate::sys::handle::Handle;
 use crate::sys::pipe::{self, AnonPipe};
 use crate::sys::stdio;
 use crate::sys_common::mutex::StaticMutex;
-use crate::sys_common::process::{CommandEnv, CommandEnvs};
+use crate::sys_common::process::CommandEnvs;
 use crate::sys_common::AsInner;
 
 use libc::{c_void, EXIT_FAILURE, EXIT_SUCCESS};
@@ -33,6 +33,60 @@ use libc::{c_void, EXIT_FAILURE, EXIT_SUCCESS};
 ////////////////////////////////////////////////////////////////////////////////
 // Command
 ////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Debug)]
+pub struct CommandEnv {
+    clear: bool,
+    vars: BTreeMap<EnvKey, Option<OsString>>,
+}
+impl Default for CommandEnv {
+    fn default() -> Self {
+        CommandEnv { clear: false, vars: Default::default() }
+    }
+}
+impl CommandEnv {
+    pub fn set(&mut self, key: &OsStr, value: &OsStr) {
+        self.vars.insert(key.to_owned().into(), Some(value.to_owned()));
+    }
+
+    pub fn remove(&mut self, key: &OsStr) {
+        if self.clear {
+            self.vars.remove(&key.to_owned().into());
+        } else {
+            self.vars.insert(key.to_owned().into(), None);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.clear = true;
+        self.vars.clear();
+    }
+
+    pub fn iter(&self) -> CommandEnvs<'_> {
+        CommandEnvs::new(self.vars.iter())
+    }
+
+    fn capture_if_changed(&self) -> Option<BTreeMap<EnvKey, OsString>> {
+        if !self.clear && self.vars.is_empty() {
+            None
+        } else {
+            let mut result = BTreeMap::<EnvKey, OsString>::new();
+            if !self.clear {
+                for (k, v) in env::vars_os() {
+                    result.insert(k.into(), v);
+                }
+            }
+            for (k, maybe_v) in &self.vars {
+                if let &Some(ref v) = maybe_v {
+                    result.insert(k.clone(), v.clone());
+                } else {
+                    result.remove(k);
+                }
+            }
+            Some(result)
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq)]
 #[doc(hidden)]

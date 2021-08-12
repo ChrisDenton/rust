@@ -112,6 +112,14 @@ pub struct CommandEnvs<'a> {
     iter: crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>,
 }
 
+impl<'a> CommandEnvs<'a> {
+    pub(crate) fn new(
+        iter: crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>,
+    ) -> Self {
+        Self { iter }
+    }
+}
+
 #[unstable(feature = "command_access", issue = "44434")]
 impl<'a> Iterator for CommandEnvs<'a> {
     type Item = (&'a OsStr, Option<&'a OsStr>);
