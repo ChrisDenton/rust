@@ -16,7 +16,6 @@ use crate::mem;
 use crate::num::NonZeroI32;
 use crate::os::windows::ffi::OsStrExt;
 use crate::path::Path;
-use crate::process::CommandEnvs;
 use crate::ptr;
 use crate::sys::c;
 use crate::sys::c::NonZeroDWORD;
@@ -34,7 +33,7 @@ use libc::{c_void, EXIT_FAILURE, EXIT_SUCCESS};
 // Command
 ////////////////////////////////////////////////////////////////////////////////
 
-pub(crate) type CommandEnvs = crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>;
+pub(crate) type CommandEnvs<'a> = crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>;
 #[derive(Clone, Debug)]
 pub struct CommandEnv {
     clear: bool,
@@ -64,7 +63,7 @@ impl CommandEnv {
     }
 
     pub fn iter(&self) -> CommandEnvs<'_> {
-        CommandEnvs::new(self.vars.iter())
+        self.vars.iter()
     }
 
     fn capture_if_changed(&self) -> Option<BTreeMap<EnvKey, OsString>> {

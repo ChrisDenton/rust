@@ -106,8 +106,7 @@ mod tests;
 
 use crate::io::prelude::*;
 
-use crate::collections::btree_map;
-use crate::ffi::{OsStr, OsString};
+use crate::ffi::OsStr;
 use crate::fmt;
 use crate::fs;
 use crate::io::{self, Initializer, IoSlice, IoSliceMut};
@@ -116,7 +115,6 @@ use crate::path::Path;
 use crate::str;
 use crate::sys::pipe::{read2, AnonPipe};
 use crate::sys::process as imp;
-use crate::sys::process::EnvKey;
 use crate::sys_common::{AsInner, AsInnerMut, FromInner, IntoInner};
 
 /// Representation of a running or exited child process.
@@ -988,7 +986,7 @@ impl Command {
     /// ```
     #[unstable(feature = "command_access", issue = "44434")]
     pub fn get_envs(&self) -> CommandEnvs<'_> {
-        self.inner.get_envs()
+        CommandEnvs { iter: self.inner.get_envs() }
     }
 
     /// Returns the working directory for the child process.
@@ -2049,7 +2047,7 @@ impl Termination for ExitCode {
 #[unstable(feature = "command_access", issue = "44434")]
 #[derive(Debug)]
 pub struct CommandEnvs<'a> {
-    iter: imp::CommandEnvs,
+    iter: imp::CommandEnvs<'a>,
 }
 
 #[unstable(feature = "command_access", issue = "44434")]
