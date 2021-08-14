@@ -8,6 +8,8 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 
+#[path = "../unix/process.rs"]
+pub mod process_unix;
 pub use crate::ffi::OsString as EnvKey;
 pub use crate::sys::process_unix::{CommandEnv, CommandEnvs};
 
