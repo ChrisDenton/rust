@@ -1,4 +1,3 @@
-pub(crate) use self::unsupported::process::{CommandEnv, CommandEnvs};
 use crate::ffi::OsStr;
 use crate::fmt;
 use crate::io;
@@ -9,6 +8,7 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 
+pub use super::process_unix::{CommandEnv, CommandEnvs};
 pub use crate::ffi::OsString as EnvKey;
 
 ////////////////////////////////////////////////////////////////////////////////
