@@ -6,8 +6,8 @@ use crate::num::NonZeroI32;
 use crate::path::Path;
 use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
-use crate::sys::unix::process::{CommandEnv, CommandEnvs};
 use crate::sys::unsupported;
+use crate::sys::unsupported::{CommandEnv, CommandEnvs};
 
 pub use crate::ffi::OsString as EnvKey;
 
