@@ -9,7 +9,6 @@ use crate::ffi::{CStr, CString, OsStr, OsString};
 use crate::fmt;
 use crate::io;
 use crate::path::Path;
-use crate::process::CommandEnvs;
 use crate::ptr;
 use crate::sys::fd::FileDesc;
 use crate::sys::fs::File;
@@ -84,6 +83,9 @@ pub struct Command {
     #[cfg(target_os = "linux")]
     create_pidfd: bool,
 }
+
+// Internal iterator type for environment variables.
+pub(crate) type CommandEnvs<'a> = crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>;
 
 // Create a new type for argv, so that we can make it `Send` and `Sync`
 struct Argv(Vec<*const c_char>);
@@ -499,8 +501,6 @@ impl<'a> fmt::Debug for CommandArgs<'a> {
         f.debug_list().entries(self.iter.clone()).finish()
     }
 }
-
-pub(crate) type CommandEnvs = crate::collections::btree_map::Iter<'a, EnvKey, Option<OsString>>;
 // Stores a set of changes to an environment
 #[derive(Clone, Debug)]
 pub struct CommandEnv {
