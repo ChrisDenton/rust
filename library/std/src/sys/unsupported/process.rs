@@ -8,7 +8,7 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 
-#[path = "../../unix/process/process_common.rs"]
+#[path = "../unix/process/process_common.rs"]
 pub mod process_common;
 pub use crate::ffi::OsString as EnvKey;
 pub use crate::sys::process_common::{CommandEnv, CommandEnvs};
