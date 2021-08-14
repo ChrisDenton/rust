@@ -1,8 +1,9 @@
-pub use self::process_common::{Command, CommandArgs, CommandEnvs, ExitCode, Stdio, StdioPipes};
+pub use self::process_common::{Command, CommandArgs, ExitCode, Stdio, StdioPipes};
 pub use self::process_inner::{ExitStatus, ExitStatusError, Process};
 pub use crate::ffi::OsString as EnvKey;
 
 mod process_common;
+pub(crate) use self::process_common::CommandEnvs;
 
 cfg_if::cfg_if! {
     if #[cfg(target_os = "fuchsia")] {
