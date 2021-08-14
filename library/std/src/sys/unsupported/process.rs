@@ -8,8 +8,8 @@ use crate::sys::fs::File;
 use crate::sys::pipe::AnonPipe;
 use crate::sys::unsupported;
 
-pub use super::process_unix::{CommandEnv, CommandEnvs};
 pub use crate::ffi::OsString as EnvKey;
+pub use crate::sys::process_unix::{CommandEnv, CommandEnvs};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Command
