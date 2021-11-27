@@ -228,17 +228,26 @@ pub fn default_submod_path<'a>(
     let default_exists = sess.source_map().file_exists(&default_path);
     let secondary_exists = sess.source_map().file_exists(&secondary_path);
 
-    match (default_exists, secondary_exists) {
-        (true, false) => Ok(ModulePathSuccess {
+    // If default_exists && default_path is a directory then use the new resolver.
+    let tertiary_path_str = format!("{}:$DATA:$DATA", default_path_str);
+    let tertiary_path = dir_path.join(&tertiary_path_str);
+    let tertiary_exists = cfg!(windows) && sess.source_map().file_exists(&tertiary_path) && default_path.is_dir();
+    
+    match (default_exists, secondary_exists, tertiary_exists) {
+        (true, false, false) => Ok(ModulePathSuccess {
             file_path: default_path,
             dir_ownership: DirOwnership::Owned { relative: Some(ident) },
         }),
-        (false, true) => Ok(ModulePathSuccess {
+        (false, true, false) => Ok(ModulePathSuccess {
             file_path: secondary_path,
             dir_ownership: DirOwnership::Owned { relative: None },
         }),
-        (false, false) => Err(ModError::FileNotFound(ident, default_path, secondary_path)),
-        (true, true) => Err(ModError::MultipleCandidates(ident, default_path, secondary_path)),
+        (_, false, true) => Ok(ModulePathSuccess {
+            file_path: tertiary_path,
+            dir_ownership: DirOwnership::Owned { relative: Some(Ident::from_str(&format!("{}.rs", ident))) }
+        }),
+        (false, false, false) => Err(ModError::FileNotFound(ident, default_path, secondary_path)),
+        _ => Err(ModError::MultipleCandidates(ident, default_path, secondary_path)),
     }
 }
 
