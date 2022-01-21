@@ -721,15 +721,12 @@ fn open_link_no_reparse(parent: &File, name: &[u16], access: u32) -> io::Result<
         let mut handle = ptr::null_mut();
         let mut io_status = c::IO_STATUS_BLOCK::default();
         let name_str = c::UNICODE_STRING::from_ref(name);
-        use crate::sync::atomic::{AtomicU32, Ordering};
         // The `OBJ_DONT_REPARSE` attribute ensures that we haven't been
-        // tricked into following a symlink. However, it may not be available in
-        // earlier versions of Windows.
-        static ATTRIBUTES: AtomicU32 = AtomicU32::new(c::OBJ_DONT_REPARSE);
+        // tricked into following a symlink.
         let object = c::OBJECT_ATTRIBUTES {
             ObjectName: &name_str,
             RootDirectory: parent.as_raw_handle(),
-            Attributes: ATTRIBUTES.load(Ordering::Relaxed),
+            Attributes: c::OBJ_DONT_REPARSE,
             ..c::OBJECT_ATTRIBUTES::default()
         };
         let status = c::NtOpenFile(
@@ -749,12 +746,6 @@ fn open_link_no_reparse(parent: &File, name: &[u16], access: u32) -> io::Result<
             // otherwise this will be mapped to `ERROR_ACCESS_DENIED` which is
             // very unhelpful.
             Err(io::Error::from_raw_os_error(c::ERROR_DELETE_PENDING as _))
-        } else if status == c::STATUS_INVALID_PARAMETER
-            && ATTRIBUTES.load(Ordering::Relaxed) == c::OBJ_DONT_REPARSE
-        {
-            // Try without `OBJ_DONT_REPARSE`. See above.
-            ATTRIBUTES.store(0, Ordering::Relaxed);
-            open_link_no_reparse(parent, name, access)
         } else {
             Err(io::Error::from_raw_os_error(c::RtlNtStatusToDosError(status) as _))
         }
