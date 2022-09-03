@@ -324,7 +324,11 @@ impl File {
         unsafe {
             let mut info: c::BY_HANDLE_FILE_INFORMATION = mem::zeroed();
             cvt(c::GetFileInformationByHandle(self.handle.as_raw_handle(), &mut info))?;
+            #[allow(unused_mut)]
             let mut reparse_tag = 0;
+            // FIXME: Temporary workaround to get miri working again.
+            // Remove this once the actual bug is fixed. See #101344.
+            #[cfg(not(miri))]
             if info.dwFileAttributes & c::FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                 let mut attr_tag: c::FILE_ATTRIBUTE_TAG_INFO = mem::zeroed();
                 cvt(c::GetFileInformationByHandleEx(

@@ -454,6 +454,8 @@ pub enum FILE_INFO_BY_HANDLE_CLASS {
     MaximumFileInfoByHandlesClass,
 }
 
+// FIXME: Temporary workaround for miri. See #101344.
+#[cfg(not(miri))]
 #[repr(C)]
 pub struct FILE_ATTRIBUTE_TAG_INFO {
     pub FileAttributes: DWORD,
