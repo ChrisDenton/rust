@@ -38,6 +38,12 @@ pub fn hashmap_random_keys() -> (u64, u64) {
 
 struct Rng(c::BCRYPT_ALG_HANDLE);
 impl Rng {
+    #[cfg(miri)]
+    fn open() -> Result<Self, c::NTSTATUS> {
+        const BCRYPT_RNG_ALG_HANDLE: c::BCRYPT_ALG_HANDLE = ptr::invalid_mut(0x81);
+        Ok(BCRYPT_RNG_ALG_HANDLE)
+    }
+    #[cfg(not(miri))]
     // Open a handle to the RNG algorithm.
     fn open() -> Result<Self, c::NTSTATUS> {
         use crate::sync::atomic::AtomicPtr;
