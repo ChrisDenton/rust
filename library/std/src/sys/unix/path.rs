@@ -1,7 +1,52 @@
 use crate::env;
-use crate::ffi::OsStr;
+use crate::ffi::{CStr, OsStr, OsString};
 use crate::io;
+use crate::os::unix::ffi::OsStringExt;
 use crate::path::{Path, PathBuf, Prefix};
+
+pub type NativePath = CStr;
+pub use crate::sys::common::small_c_string::run_path_with_cstr;
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+pub trait PathLike: crate::sealed::Sealed {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T>;
+    fn with_native_path<T, F: FnOnce(&NativePath) -> io::Result<T>>(self, f: F) -> io::Result<T>;
+}
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+impl<P: AsRef<Path>> PathLike for P {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        f(self.as_ref())
+    }
+    fn with_native_path<T, F: FnOnce(&NativePath) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        run_path_with_cstr(self.as_ref(), f)
+    }
+}
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+impl PathLike for &NativePath {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        let path = PathBuf::from(OsString::from_vec(self.to_bytes().to_vec()));
+        f(&path)
+    }
+    fn with_native_path<T, F: FnOnce(&NativePath) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        f(self)
+    }
+}
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+impl PathLike for &crate::path::NativePath {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        self.0.with_path(f)
+    }
+    fn with_native_path<T, F: FnOnce(&NativePath) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        self.0.with_native_path(f)
+    }
+}
+#[unstable(feature = "sealed", issue = "none")]
+impl<P: AsRef<Path>> crate::sealed::Sealed for P {}
+#[unstable(feature = "sealed", issue = "none")]
+impl crate::sealed::Sealed for &NativePath {}
 
 #[inline]
 pub fn is_sep_byte(b: u8) -> bool {

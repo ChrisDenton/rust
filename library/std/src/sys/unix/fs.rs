@@ -95,6 +95,61 @@ use libc::{dirent64, fstat64, ftruncate64, lseek64, lstat64, off64_t, open64, st
 
 pub use crate::sys_common::fs::try_exists;
 
+pub(crate) mod apis {
+    use crate::io;
+    use crate::path::PathBuf;
+    use crate::sys::fs;
+    pub(crate) use crate::sys::fs::{
+        DirBuilder, DirEntry, File, FileAttr, FilePermissions, FileTimes, FileType, OpenOptions,
+        ReadDir,
+    };
+    use crate::sys::path::PathLike;
+
+    pub(crate) fn remove_file<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_native_path(fs::unlink)
+    }
+    pub(crate) fn symlink_metadata<P: PathLike>(path: P) -> io::Result<FileAttr> {
+        path.with_native_path(|path| fs::lstat(path))
+    }
+    pub(crate) fn metadata<P: PathLike>(path: P) -> io::Result<FileAttr> {
+        path.with_native_path(|path| fs::stat(path))
+    }
+    pub(crate) fn rename<P: PathLike, Q: PathLike>(from: P, to: Q) -> io::Result<()> {
+        from.with_native_path(|from| to.with_native_path(|to| fs::rename(from, to)))
+    }
+    pub(crate) fn hard_link<P: PathLike, Q: PathLike>(original: P, link: Q) -> io::Result<()> {
+        original.with_native_path(|original| link.with_native_path(|link| fs::link(original, link)))
+    }
+    pub(crate) fn soft_link<P: PathLike, Q: PathLike>(original: P, link: Q) -> io::Result<()> {
+        original
+            .with_native_path(|original| link.with_native_path(|link| fs::symlink(original, link)))
+    }
+    pub(crate) fn remove_dir<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_native_path(fs::rmdir)
+    }
+    pub(crate) fn read_dir<P: PathLike>(path: P) -> io::Result<ReadDir> {
+        path.with_path(fs::readdir)
+    }
+    pub(crate) fn set_permissions<P: PathLike>(path: P, perms: FilePermissions) -> io::Result<()> {
+        path.with_native_path(|path| fs::set_perm(path, perms))
+    }
+    pub(crate) fn copy<P: PathLike, Q: PathLike>(from: P, to: Q) -> io::Result<u64> {
+        from.with_path(|from| to.with_path(|to| fs::copy(from, to)))
+    }
+    pub(crate) fn canonicalize<P: PathLike>(path: P) -> io::Result<PathBuf> {
+        path.with_native_path(fs::canonicalize)
+    }
+    pub(crate) fn remove_dir_all<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_path(fs::remove_dir_all)
+    }
+    pub(crate) fn read_link<P: PathLike>(path: P) -> io::Result<PathBuf> {
+        path.with_path(fs::readlink)
+    }
+    pub(crate) fn try_exists<P: PathLike>(path: P) -> io::Result<bool> {
+        path.with_path(fs::try_exists)
+    }
+}
+
 pub struct File(FileDesc);
 
 // FIXME: This should be available on Linux with all `target_env`.
@@ -814,7 +869,8 @@ impl DirEntry {
         miri
     ))]
     pub fn metadata(&self) -> io::Result<FileAttr> {
-        lstat(&self.path())
+        use crate::sys::unix::path::PathLike;
+        self.path().as_path().with_native_path(lstat)
     }
 
     #[cfg(any(
@@ -1020,8 +1076,8 @@ impl OpenOptions {
 }
 
 impl File {
-    pub fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
-        run_path_with_cstr(path, |path| File::open_c(path, opts))
+    pub fn open_native(path: &CStr, opts: &OpenOptions) -> io::Result<File> {
+        File::open_c(path, opts)
     }
 
     pub fn open_c(path: &CStr, opts: &OpenOptions) -> io::Result<File> {
@@ -1429,24 +1485,20 @@ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
     }
 }
 
-pub fn unlink(p: &Path) -> io::Result<()> {
-    run_path_with_cstr(p, |p| cvt(unsafe { libc::unlink(p.as_ptr()) }).map(|_| ()))
+pub fn unlink(p: &CStr) -> io::Result<()> {
+    cvt(unsafe { libc::unlink(p.as_ptr()) }).map(|_| ())
 }
 
-pub fn rename(old: &Path, new: &Path) -> io::Result<()> {
-    run_path_with_cstr(old, |old| {
-        run_path_with_cstr(new, |new| {
-            cvt(unsafe { libc::rename(old.as_ptr(), new.as_ptr()) }).map(|_| ())
-        })
-    })
+pub fn rename(old: &CStr, new: &CStr) -> io::Result<()> {
+    cvt(unsafe { libc::rename(old.as_ptr(), new.as_ptr()) }).map(|_| ())
 }
 
-pub fn set_perm(p: &Path, perm: FilePermissions) -> io::Result<()> {
-    run_path_with_cstr(p, |p| cvt_r(|| unsafe { libc::chmod(p.as_ptr(), perm.mode) }).map(|_| ()))
+pub fn set_perm(p: &CStr, perm: FilePermissions) -> io::Result<()> {
+    cvt_r(|| unsafe { libc::chmod(p.as_ptr(), perm.mode) }).map(|_| ())
 }
 
-pub fn rmdir(p: &Path) -> io::Result<()> {
-    run_path_with_cstr(p, |p| cvt(unsafe { libc::rmdir(p.as_ptr()) }).map(|_| ()))
+pub fn rmdir(p: &CStr) -> io::Result<()> {
+    cvt(unsafe { libc::rmdir(p.as_ptr()) }).map(|_| ())
 }
 
 pub fn readlink(p: &Path) -> io::Result<PathBuf> {
@@ -1478,91 +1530,77 @@ pub fn readlink(p: &Path) -> io::Result<PathBuf> {
     })
 }
 
-pub fn symlink(original: &Path, link: &Path) -> io::Result<()> {
-    run_path_with_cstr(original, |original| {
-        run_path_with_cstr(link, |link| {
-            cvt(unsafe { libc::symlink(original.as_ptr(), link.as_ptr()) }).map(|_| ())
-        })
-    })
+pub fn symlink(original: &CStr, link: &CStr) -> io::Result<()> {
+    cvt(unsafe { libc::symlink(original.as_ptr(), link.as_ptr()) }).map(|_| ())
 }
 
-pub fn link(original: &Path, link: &Path) -> io::Result<()> {
-    run_path_with_cstr(original, |original| {
-        run_path_with_cstr(link, |link| {
-            cfg_if::cfg_if! {
-                if #[cfg(any(target_os = "vxworks", target_os = "redox", target_os = "android", target_os = "espidf", target_os = "horizon"))] {
-                    // VxWorks, Redox and ESP-IDF lack `linkat`, so use `link` instead. POSIX leaves
-                    // it implementation-defined whether `link` follows symlinks, so rely on the
-                    // `symlink_hard_link` test in library/std/src/fs/tests.rs to check the behavior.
-                    // Android has `linkat` on newer versions, but we happen to know `link`
-                    // always has the correct behavior, so it's here as well.
-                    cvt(unsafe { libc::link(original.as_ptr(), link.as_ptr()) })?;
-                } else if #[cfg(target_os = "macos")] {
-                    // On MacOS, older versions (<=10.9) lack support for linkat while newer
-                    // versions have it. We want to use linkat if it is available, so we use weak!
-                    // to check. `linkat` is preferable to `link` because it gives us a flag to
-                    // specify how symlinks should be handled. We pass 0 as the flags argument,
-                    // meaning it shouldn't follow symlinks.
-                    weak!(fn linkat(c_int, *const c_char, c_int, *const c_char, c_int) -> c_int);
+pub fn link(original: &CStr, link: &CStr) -> io::Result<()> {
+    cfg_if::cfg_if! {
+        if #[cfg(any(target_os = "vxworks", target_os = "redox", target_os = "android", target_os = "espidf", target_os = "horizon"))] {
+            // VxWorks, Redox and ESP-IDF lack `linkat`, so use `link` instead. POSIX leaves
+            // it implementation-defined whether `link` follows symlinks, so rely on the
+            // `symlink_hard_link` test in library/std/src/fs/tests.rs to check the behavior.
+            // Android has `linkat` on newer versions, but we happen to know `link`
+            // always has the correct behavior, so it's here as well.
+            cvt(unsafe { libc::link(original.as_ptr(), link.as_ptr()) })?;
+        } else if #[cfg(target_os = "macos")] {
+            // On MacOS, older versions (<=10.9) lack support for linkat while newer
+            // versions have it. We want to use linkat if it is available, so we use weak!
+            // to check. `linkat` is preferable to `link` because it gives us a flag to
+            // specify how symlinks should be handled. We pass 0 as the flags argument,
+            // meaning it shouldn't follow symlinks.
+            weak!(fn linkat(c_int, *const c_char, c_int, *const c_char, c_int) -> c_int);
 
-                    if let Some(f) = linkat.get() {
-                        cvt(unsafe { f(libc::AT_FDCWD, original.as_ptr(), libc::AT_FDCWD, link.as_ptr(), 0) })?;
-                    } else {
-                        cvt(unsafe { libc::link(original.as_ptr(), link.as_ptr()) })?;
-                    };
-                } else {
-                    // Where we can, use `linkat` instead of `link`; see the comment above
-                    // this one for details on why.
-                    cvt(unsafe { libc::linkat(libc::AT_FDCWD, original.as_ptr(), libc::AT_FDCWD, link.as_ptr(), 0) })?;
-                }
-            }
-            Ok(())
-        })
-    })
-}
-
-pub fn stat(p: &Path) -> io::Result<FileAttr> {
-    run_path_with_cstr(p, |p| {
-        cfg_has_statx! {
-            if let Some(ret) = unsafe { try_statx(
-                libc::AT_FDCWD,
-                p.as_ptr(),
-                libc::AT_STATX_SYNC_AS_STAT,
-                libc::STATX_ALL,
-            ) } {
-                return ret;
-            }
+            if let Some(f) = linkat.get() {
+                cvt(unsafe { f(libc::AT_FDCWD, original.as_ptr(), libc::AT_FDCWD, link.as_ptr(), 0) })?;
+            } else {
+                cvt(unsafe { libc::link(original.as_ptr(), link.as_ptr()) })?;
+            };
+        } else {
+            // Where we can, use `linkat` instead of `link`; see the comment above
+            // this one for details on why.
+            cvt(unsafe { libc::linkat(libc::AT_FDCWD, original.as_ptr(), libc::AT_FDCWD, link.as_ptr(), 0) })?;
         }
-
-        let mut stat: stat64 = unsafe { mem::zeroed() };
-        cvt(unsafe { stat64(p.as_ptr(), &mut stat) })?;
-        Ok(FileAttr::from_stat64(stat))
-    })
+    }
+    Ok(())
 }
 
-pub fn lstat(p: &Path) -> io::Result<FileAttr> {
-    run_path_with_cstr(p, |p| {
-        cfg_has_statx! {
-            if let Some(ret) = unsafe { try_statx(
-                libc::AT_FDCWD,
-                p.as_ptr(),
-                libc::AT_SYMLINK_NOFOLLOW | libc::AT_STATX_SYNC_AS_STAT,
-                libc::STATX_ALL,
-            ) } {
-                return ret;
-            }
+pub fn stat(p: &CStr) -> io::Result<FileAttr> {
+    cfg_has_statx! {
+        if let Some(ret) = unsafe { try_statx(
+            libc::AT_FDCWD,
+            p.as_ptr(),
+            libc::AT_STATX_SYNC_AS_STAT,
+            libc::STATX_ALL,
+        ) } {
+            return ret;
         }
+    }
 
-        let mut stat: stat64 = unsafe { mem::zeroed() };
-        cvt(unsafe { lstat64(p.as_ptr(), &mut stat) })?;
-        Ok(FileAttr::from_stat64(stat))
-    })
+    let mut stat: stat64 = unsafe { mem::zeroed() };
+    cvt(unsafe { stat64(p.as_ptr(), &mut stat) })?;
+    Ok(FileAttr::from_stat64(stat))
 }
 
-pub fn canonicalize(p: &Path) -> io::Result<PathBuf> {
-    let r = run_path_with_cstr(p, |path| unsafe {
-        Ok(libc::realpath(path.as_ptr(), ptr::null_mut()))
-    })?;
+pub fn lstat(p: &CStr) -> io::Result<FileAttr> {
+    cfg_has_statx! {
+        if let Some(ret) = unsafe { try_statx(
+            libc::AT_FDCWD,
+            p.as_ptr(),
+            libc::AT_SYMLINK_NOFOLLOW | libc::AT_STATX_SYNC_AS_STAT,
+            libc::STATX_ALL,
+        ) } {
+            return ret;
+        }
+    }
+
+    let mut stat: stat64 = unsafe { mem::zeroed() };
+    cvt(unsafe { lstat64(p.as_ptr(), &mut stat) })?;
+    Ok(FileAttr::from_stat64(stat))
+}
+
+pub fn canonicalize(p: &CStr) -> io::Result<PathBuf> {
+    let r = unsafe { libc::realpath(p.as_ptr(), ptr::null_mut()) };
     if r.is_null() {
         return Err(io::Error::last_os_error());
     }
@@ -1818,8 +1856,8 @@ mod remove_dir_impl {
     use crate::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
     use crate::os::unix::prelude::{OwnedFd, RawFd};
     use crate::path::{Path, PathBuf};
-    use crate::sys::common::small_c_string::run_path_with_cstr;
     use crate::sys::{cvt, cvt_r};
+    use crate::sys::path::PathLike;
 
     #[cfg(not(any(
         all(target_os = "linux", target_env = "gnu"),
@@ -1969,28 +2007,28 @@ mod remove_dir_impl {
         Ok(())
     }
 
-    fn remove_dir_all_modern(p: &Path) -> io::Result<()> {
+    fn remove_dir_all_modern(p: &CStr) -> io::Result<()> {
         // We cannot just call remove_dir_all_recursive() here because that would not delete a passed
         // symlink. No need to worry about races, because remove_dir_all_recursive() does not recurse
         // into symlinks.
         let attr = lstat(p)?;
         if attr.file_type().is_symlink() {
-            crate::fs::remove_file(p)
+            crate::sys::fs::unlink(p)
         } else {
-            run_path_with_cstr(p, |p| remove_dir_all_recursive(None, &p))
+            remove_dir_all_recursive(None, &p)
         }
     }
 
     #[cfg(not(all(target_os = "macos", not(target_arch = "aarch64"))))]
     pub fn remove_dir_all(p: &Path) -> io::Result<()> {
-        remove_dir_all_modern(p)
+        p.with_native_path(remove_dir_all_modern)
     }
 
     #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
     pub fn remove_dir_all(p: &Path) -> io::Result<()> {
         if macos_weak::has_openat() {
             // openat() is available with macOS 10.10+, just like unlinkat() and fdopendir()
-            remove_dir_all_modern(p)
+            p.with_native_path(remove_dir_all_modern)
         } else {
             // fall back to classic implementation
             crate::sys_common::fs::remove_dir_all(p)
