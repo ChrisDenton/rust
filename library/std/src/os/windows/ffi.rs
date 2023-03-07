@@ -54,6 +54,7 @@
 #![stable(feature = "rust1", since = "1.0.0")]
 
 use crate::ffi::{OsStr, OsString};
+use crate::path::NativePath;
 use crate::sealed::Sealed;
 use crate::sys::os_str::Buf;
 use crate::sys_common::wtf8::Wtf8Buf;
@@ -132,5 +133,31 @@ impl OsStrExt for OsStr {
     #[inline]
     fn encode_wide(&self) -> EncodeWide<'_> {
         self.as_inner().inner.encode_wide()
+    }
+}
+
+/// On Windows `NativePath` wraps a wide string for use in filesystem function calls.
+/// These strings are `&[u16]` slices.
+///
+/// # Wide strings
+///
+/// Filesystem paths in Windows are encoded as UTF-16 strings.
+/// However, because the kernel does not verify validity this may contain invalid UTF-16.
+/// Therefore we use the term "wide string" for potentially invalid UTF-16.
+#[unstable(feature = "pathlike", issue = "none")]
+pub trait NativePathExt: Sealed {
+    /// Wrap a Windows wide string as a `NativePath`.
+    fn from_wide(wide: &[u16]) -> &NativePath;
+    /// Unwrap the `NativePath` to return the inner wide string.
+    fn into_wide(&self) -> &[u16];
+}
+#[unstable(feature = "pathlike", issue = "none")]
+impl NativePathExt for NativePath {
+    fn from_wide(wide: &[u16]) -> &NativePath {
+        assert_eq!(wide.last(), Some(&0));
+        unsafe { &*(wide as *const [u16] as *const Self) }
+    }
+    fn into_wide(&self) -> &[u16] {
+        unsafe { &*(self as *const Self as *const [u16]) }
     }
 }

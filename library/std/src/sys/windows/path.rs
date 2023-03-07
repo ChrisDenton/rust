@@ -11,6 +11,57 @@ mod tests;
 pub const MAIN_SEP_STR: &str = "\\";
 pub const MAIN_SEP: char = '\\';
 
+#[unstable(feature = "path_like_internals", issue = "none")]
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct WindowsPath(pub [u16]);
+impl WindowsPath {
+    pub(crate) unsafe fn new_unchecked(native: &[u16]) -> &Self {
+        unsafe { &*(native as *const [u16] as *const Self) }
+    }
+    pub(crate) fn as_ptr(&self) -> *const u16 {
+        self.0.as_ptr()
+    }
+}
+pub(crate) type NativePath = WindowsPath;
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+pub trait PathLike: crate::sealed::Sealed {
+    /// This should eventually be unnecessary.
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T>;
+    /// A `[u16]` path, possibly converted to a verbatim path for use in APIs.
+    fn with_native_path<T, F: FnOnce(&WindowsPath) -> io::Result<T>>(self, f: F) -> io::Result<T>;
+    // /// A `[u16]` path that hasn't been modified.
+    //fn with_exact_path<T, F: FnOnce(&crate::path::NativePath) -> io::Result<T>>(self, f: F) -> io::Result<T>;
+}
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+impl<P: AsRef<Path>> PathLike for P {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        f(self.as_ref())
+    }
+    fn with_native_path<T, F: FnOnce(&WindowsPath) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        let path = maybe_verbatim(self.as_ref())?;
+        f(unsafe { WindowsPath::new_unchecked(&path) })
+    }
+    // fn with_exact_path
+}
+
+#[unstable(feature = "path_like_internals", issue = "none")]
+impl PathLike for &crate::path::NativePath {
+    fn with_path<T, F: FnOnce(&Path) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        let path = super::os2path(&self.0.0);
+        f(&path)
+    }
+    fn with_native_path<T, F: FnOnce(&WindowsPath) -> io::Result<T>>(self, f: F) -> io::Result<T> {
+        f(&self.0)
+    }
+}
+#[unstable(feature = "sealed", issue = "none")]
+impl<P: AsRef<Path>> crate::sealed::Sealed for P {}
+#[unstable(feature = "sealed", issue = "none")]
+impl crate::sealed::Sealed for &NativePath {}
+
 /// # Safety
 ///
 /// `bytes` must be a valid wtf8 encoded slice

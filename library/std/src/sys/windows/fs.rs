@@ -11,13 +11,72 @@ use crate::ptr;
 use crate::slice;
 use crate::sync::Arc;
 use crate::sys::handle::Handle;
+use crate::sys::path::maybe_verbatim;
 use crate::sys::time::SystemTime;
 use crate::sys::{c, cvt, Align8};
 use crate::sys_common::{AsInner, FromInner, IntoInner};
 use crate::thread;
 
-use super::path::maybe_verbatim;
+type NativePath = crate::sys::path::WindowsPath;
+
 use super::to_u16s;
+
+/// The crate-public interface
+pub(crate) mod apis {
+    use crate::io;
+    use crate::path::PathBuf;
+    use crate::sys::fs;
+    pub(crate) use crate::sys::fs::{
+        DirBuilder, DirEntry, File, FileAttr, FilePermissions, FileTimes, FileType, OpenOptions,
+        ReadDir,
+    };
+    use crate::sys::path::PathLike;
+
+    pub(crate) fn remove_file<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_native_path(fs::unlink)
+    }
+    pub(crate) fn symlink_metadata<P: PathLike>(path: P) -> io::Result<FileAttr> {
+        path.with_native_path(|path| fs::metadata(path, fs::ReparsePoint::Open))
+    }
+    pub(crate) fn metadata<P: PathLike>(path: P) -> io::Result<FileAttr> {
+        path.with_native_path(|path| fs::metadata(path, fs::ReparsePoint::Follow))
+    }
+    pub(crate) fn rename<P: PathLike, Q: PathLike>(from: P, to: Q) -> io::Result<()> {
+        from.with_native_path(|from| to.with_native_path(|to| fs::rename(from, to)))
+    }
+    pub(crate) fn hard_link<P: PathLike, Q: PathLike>(original: P, link: Q) -> io::Result<()> {
+        original.with_native_path(|original| {
+            link.with_native_path(|link| fs::hard_link(original, link))
+        })
+    }
+    pub(crate) fn soft_link<P: PathLike, Q: PathLike>(original: P, link: Q) -> io::Result<()> {
+        original.with_path(|original| link.with_native_path(|link| fs::symlink(original, link)))
+    }
+    pub(crate) fn remove_dir<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_native_path(fs::rmdir)
+    }
+    pub(crate) fn read_dir<P: PathLike>(path: P) -> io::Result<ReadDir> {
+        path.with_path(fs::readdir)
+    }
+    pub(crate) fn set_permissions<P: PathLike>(path: P, perms: FilePermissions) -> io::Result<()> {
+        path.with_native_path(|path| fs::set_perm(path, perms))
+    }
+    pub(crate) fn copy<P: PathLike, Q: PathLike>(from: P, to: Q) -> io::Result<u64> {
+        from.with_native_path(|from| to.with_native_path(|to| fs::copy(from, to)))
+    }
+    pub(crate) fn canonicalize<P: PathLike>(path: P) -> io::Result<PathBuf> {
+        path.with_native_path(fs::canonicalize)
+    }
+    pub(crate) fn remove_dir_all<P: PathLike>(path: P) -> io::Result<()> {
+        path.with_native_path(fs::remove_dir_all)
+    }
+    pub(crate) fn read_link<P: PathLike>(path: P) -> io::Result<PathBuf> {
+        path.with_native_path(fs::readlink)
+    }
+    pub(crate) fn try_exists<P: PathLike>(path: P) -> io::Result<bool> {
+        path.with_native_path(fs::try_exists)
+    }
+}
 
 pub struct File {
     handle: Handle,
@@ -277,8 +336,12 @@ impl OpenOptions {
 }
 
 impl File {
-    pub fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
+    pub(super) fn open(path: &Path, opts: &OpenOptions) -> io::Result<File> {
         let path = maybe_verbatim(path)?;
+        let path = unsafe { NativePath::new_unchecked(&path) };
+        Self::open_native(path, opts)
+    }
+    pub fn open_native(path: &NativePath, opts: &OpenOptions) -> io::Result<File> {
         let handle = unsafe {
             c::CreateFileW(
                 path.as_ptr(),
@@ -1049,36 +1112,32 @@ pub fn readdir(p: &Path) -> io::Result<ReadDir> {
     }
 }
 
-pub fn unlink(p: &Path) -> io::Result<()> {
-    let p_u16s = maybe_verbatim(p)?;
-    cvt(unsafe { c::DeleteFileW(p_u16s.as_ptr()) })?;
+pub fn unlink(p: &NativePath) -> io::Result<()> {
+    cvt(unsafe { c::DeleteFileW(p.as_ptr()) })?;
     Ok(())
 }
 
-pub fn rename(old: &Path, new: &Path) -> io::Result<()> {
-    let old = maybe_verbatim(old)?;
-    let new = maybe_verbatim(new)?;
+pub fn rename(old: &NativePath, new: &NativePath) -> io::Result<()> {
     cvt(unsafe { c::MoveFileExW(old.as_ptr(), new.as_ptr(), c::MOVEFILE_REPLACE_EXISTING) })?;
     Ok(())
 }
 
-pub fn rmdir(p: &Path) -> io::Result<()> {
-    let p = maybe_verbatim(p)?;
+pub fn rmdir(p: &NativePath) -> io::Result<()> {
     cvt(unsafe { c::RemoveDirectoryW(p.as_ptr()) })?;
     Ok(())
 }
 
 /// Open a file or directory without following symlinks.
-fn open_link(path: &Path, access_mode: u32) -> io::Result<File> {
+fn open_link(path: &NativePath, access_mode: u32) -> io::Result<File> {
     let mut opts = OpenOptions::new();
     opts.access_mode(access_mode);
     // `FILE_FLAG_BACKUP_SEMANTICS` allows opening directories.
     // `FILE_FLAG_OPEN_REPARSE_POINT` opens a link instead of its target.
     opts.custom_flags(c::FILE_FLAG_BACKUP_SEMANTICS | c::FILE_FLAG_OPEN_REPARSE_POINT);
-    File::open(path, &opts)
+    File::open_native(path, &opts)
 }
 
-pub fn remove_dir_all(path: &Path) -> io::Result<()> {
+pub fn remove_dir_all(path: &NativePath) -> io::Result<()> {
     let file = open_link(path, c::DELETE | c::FILE_LIST_DIRECTORY)?;
 
     // Test if the file is not a directory or a symlink to a directory.
@@ -1175,24 +1234,23 @@ fn remove_dir_all_iterative(f: &File, delete: fn(&File) -> io::Result<()>) -> io
     Ok(())
 }
 
-pub fn readlink(path: &Path) -> io::Result<PathBuf> {
+pub fn readlink(path: &NativePath) -> io::Result<PathBuf> {
     // Open the link with no access mode, instead of generic read.
     // By default FILE_LIST_DIRECTORY is denied for the junction "C:\Documents and Settings", so
     // this is needed for a common case.
     let mut opts = OpenOptions::new();
     opts.access_mode(0);
     opts.custom_flags(c::FILE_FLAG_OPEN_REPARSE_POINT | c::FILE_FLAG_BACKUP_SEMANTICS);
-    let file = File::open(&path, &opts)?;
+    let file = File::open_native(path, &opts)?;
     file.readlink()
 }
 
-pub fn symlink(original: &Path, link: &Path) -> io::Result<()> {
+pub fn symlink(original: &Path, link: &NativePath) -> io::Result<()> {
     symlink_inner(original, link, false)
 }
 
-pub fn symlink_inner(original: &Path, link: &Path, dir: bool) -> io::Result<()> {
+pub fn symlink_inner(original: &Path, link: &NativePath, dir: bool) -> io::Result<()> {
     let original = to_u16s(original)?;
-    let link = maybe_verbatim(link)?;
     let flags = if dir { c::SYMBOLIC_LINK_FLAG_DIRECTORY } else { 0 };
     // Formerly, symlink creation required the SeCreateSymbolicLink privilege. For the Windows 10
     // Creators Update, Microsoft loosened this to allow unprivileged symlink creation if the
@@ -1220,27 +1278,17 @@ pub fn symlink_inner(original: &Path, link: &Path, dir: bool) -> io::Result<()> 
 }
 
 #[cfg(not(target_vendor = "uwp"))]
-pub fn link(original: &Path, link: &Path) -> io::Result<()> {
-    let original = maybe_verbatim(original)?;
-    let link = maybe_verbatim(link)?;
+pub fn hard_link(original: &NativePath, link: &NativePath) -> io::Result<()> {
     cvt(unsafe { c::CreateHardLinkW(link.as_ptr(), original.as_ptr(), ptr::null_mut()) })?;
     Ok(())
 }
 
 #[cfg(target_vendor = "uwp")]
-pub fn link(_original: &Path, _link: &Path) -> io::Result<()> {
+pub fn hard_link(_original: &NativePath, _link: &NativePath) -> io::Result<()> {
     return Err(io::const_io_error!(
         io::ErrorKind::Unsupported,
         "hard link are not supported on UWP",
     ));
-}
-
-pub fn stat(path: &Path) -> io::Result<FileAttr> {
-    metadata(path, ReparsePoint::Follow)
-}
-
-pub fn lstat(path: &Path) -> io::Result<FileAttr> {
-    metadata(path, ReparsePoint::Open)
 }
 
 #[repr(u32)]
@@ -1255,7 +1303,7 @@ impl ReparsePoint {
     }
 }
 
-fn metadata(path: &Path, reparse: ReparsePoint) -> io::Result<FileAttr> {
+fn metadata(path: &NativePath, reparse: ReparsePoint) -> io::Result<FileAttr> {
     let mut opts = OpenOptions::new();
     // No read or write permissions are necessary
     opts.access_mode(0);
@@ -1264,7 +1312,7 @@ fn metadata(path: &Path, reparse: ReparsePoint) -> io::Result<FileAttr> {
     // Attempt to open the file normally.
     // If that fails with `ERROR_SHARING_VIOLATION` then retry using `FindFirstFileW`.
     // If the fallback fails for any reason we return the original error.
-    match File::open(path, &opts) {
+    match File::open_native(path, &opts) {
         Ok(file) => file.file_attr(),
         Err(e)
             if [Some(c::ERROR_SHARING_VIOLATION as _), Some(c::ERROR_ACCESS_DENIED as _)]
@@ -1277,8 +1325,6 @@ fn metadata(path: &Path, reparse: ReparsePoint) -> io::Result<FileAttr> {
             // However, there are special system files, such as
             // `C:\hiberfil.sys`, that are locked in a way that denies even that.
             unsafe {
-                let path = maybe_verbatim(path)?;
-
                 // `FindFirstFileW` accepts wildcard file names.
                 // Fortunately wildcards are not valid file names and
                 // `ERROR_SHARING_VIOLATION` means the file exists (but is locked)
@@ -1310,8 +1356,7 @@ fn metadata(path: &Path, reparse: ReparsePoint) -> io::Result<FileAttr> {
     }
 }
 
-pub fn set_perm(p: &Path, perm: FilePermissions) -> io::Result<()> {
-    let p = maybe_verbatim(p)?;
+pub fn set_perm(p: &NativePath, perm: FilePermissions) -> io::Result<()> {
     unsafe {
         cvt(c::SetFileAttributesW(p.as_ptr(), perm.attrs))?;
         Ok(())
@@ -1327,17 +1372,17 @@ fn get_path(f: &File) -> io::Result<PathBuf> {
     )
 }
 
-pub fn canonicalize(p: &Path) -> io::Result<PathBuf> {
+pub fn canonicalize(p: &NativePath) -> io::Result<PathBuf> {
     let mut opts = OpenOptions::new();
     // No read or write permissions are necessary
     opts.access_mode(0);
     // This flag is so we can open directories too
     opts.custom_flags(c::FILE_FLAG_BACKUP_SEMANTICS);
-    let f = File::open(p, &opts)?;
+    let f = File::open_native(p, &opts)?;
     get_path(&f)
 }
 
-pub fn copy(from: &Path, to: &Path) -> io::Result<u64> {
+pub fn copy(from: &NativePath, to: &NativePath) -> io::Result<u64> {
     unsafe extern "system" fn callback(
         _TotalFileSize: c::LARGE_INTEGER,
         _TotalBytesTransferred: c::LARGE_INTEGER,
@@ -1354,13 +1399,11 @@ pub fn copy(from: &Path, to: &Path) -> io::Result<u64> {
         }
         c::PROGRESS_CONTINUE
     }
-    let pfrom = maybe_verbatim(from)?;
-    let pto = maybe_verbatim(to)?;
     let mut size = 0i64;
     cvt(unsafe {
         c::CopyFileExW(
-            pfrom.as_ptr(),
-            pto.as_ptr(),
+            from.as_ptr(),
+            to.as_ptr(),
             Some(callback),
             &mut size as *mut _ as *mut _,
             ptr::null_mut(),
@@ -1432,14 +1475,14 @@ fn symlink_junction_inner(original: &Path, junction: &Path) -> io::Result<()> {
 }
 
 // Try to see if a file exists but, unlike `exists`, report I/O errors.
-pub fn try_exists(path: &Path) -> io::Result<bool> {
+pub fn try_exists(path: &NativePath) -> io::Result<bool> {
     // Open the file to ensure any symlinks are followed to their target.
     let mut opts = OpenOptions::new();
     // No read, write, etc access rights are needed.
     opts.access_mode(0);
     // Backup semantics enables opening directories as well as files.
     opts.custom_flags(c::FILE_FLAG_BACKUP_SEMANTICS);
-    match File::open(path, &opts) {
+    match File::open_native(path, &opts) {
         Err(e) => match e.kind() {
             // The file definitely does not exist
             io::ErrorKind::NotFound => Ok(false),
