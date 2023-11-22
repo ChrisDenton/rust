@@ -1317,6 +1317,7 @@ impl<'a> Builder<'a> {
             if crate::core::build_steps::llvm::prebuilt_llvm_config(self, target).is_err() {
                 cargo.env("RUST_CHECK", "1");
             }
+            cargo.arg("--allow-dirty");
         }
 
         let stage = if compiler.stage == 0 && self.local_rebuild {
