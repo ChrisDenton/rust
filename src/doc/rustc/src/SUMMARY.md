@@ -80,6 +80,10 @@
     - [x86_64-fortanix-unknown-sgx](platform-support/x86_64-fortanix-unknown-sgx.md)
     - [x86_64-unknown-linux-none.md](platform-support/x86_64-unknown-linux-none.md)
     - [x86_64-unknown-none](platform-support/x86_64-unknown-none.md)
+    - [x86_64h-apple-darwin](platform-support/x86_64h-apple-darwin.md)
+<!--    - [List of Targets](platform-support/targets.md) (see #120745) -->
+<!-- TARGET_LIST SECTION START -->
+<!-- TARGET_LIST SECTION END -->
 - [Targets](targets/index.md)
     - [Built-in Targets](targets/built-in.md)
     - [Custom Targets](targets/custom.md)

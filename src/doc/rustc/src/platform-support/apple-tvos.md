@@ -2,6 +2,16 @@
 
 Apple tvOS targets.
 
+<!--
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+***WARNING***
+This target has already been migrated to the new target docs system: #120745
+When editing this file, make sure that you keep the equivalent docs in ../../target_infos in sync!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-->
+
 **Tier: 3**
 
 - `aarch64-apple-tvos`: Apple tvOS on ARM64.
