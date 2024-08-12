@@ -2,9 +2,6 @@
 
 #![stable(feature = "raw_os", since = "1.1.0")]
 
-#[cfg(test)]
-mod tests;
-
 macro_rules! alias_core_ffi {
     ($($t:ident)*) => {$(
         #[stable(feature = "raw_os", since = "1.1.0")]
