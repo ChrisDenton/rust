@@ -1689,6 +1689,9 @@ Executed at: {executed_at}"#,
             if let Err(e) = fs::copy(&src, dst) {
                 panic!("failed to copy `{}` to `{}`: {}", src.display(), dst.display(), e)
             }
+            // Avoid potentially setting the readonly attribute on Windows as this may cause
+            // spurious failures when something tries to delete it.
+            #[cfg(not(windows))]
             t!(fs::set_permissions(dst, metadata.permissions()));
 
             // Restore file times because changing permissions on e.g. Linux using `chmod` can cause
