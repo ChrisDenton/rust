@@ -19,6 +19,12 @@ try:
 except ImportError:
     lzma = None
 
+# Cygwin/Msys2 python is different in important ways to native Python. E.g. it uses unix-style paths.
+# We don't currently support this but we don't prevent it either.
+if sys.platform == "cygwin":
+    print("WARNING: cygwin Python is not supported", file=sys.stderr)
+    print("NOTE: If this fails, try using native Python", file=sys.stderr)
+
 def platform_is_win32():
     return sys.platform == 'win32'
 
