@@ -5,18 +5,29 @@
 // trigger an error too, as they will all be mixed together.
 // See https://github.com/rust-lang/rust/pull/111626
 
+use std::io::IsTerminal;
+
 use run_make_support::{diff, rfs, rustc};
 
 fn main() {
     rfs::create_dir("out");
+
+    #[cfg(not(windows))]
+    let stdout = std::fs::File::options().write(true).open("/dev/ptmx").unwrap();
+    // FIXME: If this test fails and the compiler does print to the console, then this will produce a lot of output.
+    // We should spawn a new console instead to print stdout.
+    #[cfg(windows)]
+    let stdout = std::fs::File::options().read(true).write(true).open(r"\\.\CONOUT$").unwrap();
+
+    assert!(stdout.is_terminal());
     test_asm();
     test_llvm_ir();
     test_dep_info();
     test_mir();
-    test_llvm_bc();
-    test_obj();
-    test_metadata();
-    test_link();
+    test_llvm_bc(&stdout);
+    test_obj(&stdout);
+    test_metadata(&stdout);
+    test_link(&stdout);
     test_multiple_types();
     test_multiple_types_option_o();
 }
@@ -50,26 +61,46 @@ fn test_mir() {
 }
 
 // FIXME: ptmx
-fn test_llvm_bc() {
-    let emit = rustc().emit("llvm-bc=-").input("test.rs").run().stderr_utf8();
+fn test_llvm_bc(stdout: &std::fs::File) {
+    let emit = rustc()
+        .emit("llvm-bc=-")
+        .stdout(stdout.try_clone().unwrap())
+        .input("test.rs")
+        .run_fail()
+        .stderr_utf8();
     diff().expected_file("emit-llvm-bc.stderr").actual_text("actual", &emit).run();
 }
 
 // FIXME: ptmx
-fn test_obj() {
-    let emit = rustc().emit("obj=-").input("test.rs").run().stderr_utf8();
+fn test_obj(stdout: &std::fs::File) {
+    let emit = rustc()
+        .emit("obj=-")
+        .stdout(stdout.try_clone().unwrap())
+        .input("test.rs")
+        .run_fail()
+        .stderr_utf8();
     diff().expected_file("emit-obj.stderr").actual_text("actual", &emit).run();
 }
 
 // FIXME: ptmx
-fn test_metadata() {
-    let emit = rustc().emit("metadata=-").input("test.rs").run().stderr_utf8();
+fn test_metadata(stdout: &std::fs::File) {
+    let emit = rustc()
+        .emit("metadata=-")
+        .input("test.rs")
+        .stdout(stdout.try_clone().unwrap())
+        .run_fail()
+        .stderr_utf8();
     diff().expected_file("emit-metadata.stderr").actual_text("actual", &emit).run();
 }
 
 // FIXME: ptmx
-fn test_link() {
-    let emit = rustc().emit("link=-").input("test.rs").run().stderr_utf8();
+fn test_link(stdout: &std::fs::File) {
+    let emit = rustc()
+        .emit("link=-")
+        .input("test.rs")
+        .stdout(stdout.try_clone().unwrap())
+        .run_fail()
+        .stderr_utf8();
     diff().expected_file("emit-link.stderr").actual_text("actual", &emit).run();
 }
 

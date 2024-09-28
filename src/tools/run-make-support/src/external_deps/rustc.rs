@@ -1,5 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use std::process::Stdio;
 
 use crate::command::Command;
 use crate::env::env_var;
@@ -291,6 +292,14 @@ impl Rustc {
     /// Add multiple extra arguments to the linker invocation, via `-Clink-args`.
     pub fn link_args(&mut self, link_args: &str) -> &mut Self {
         self.cmd.arg(format!("-Clink-args={link_args}"));
+        self
+    }
+
+    /// Configuration for the child process’s standard output (stdout) handle.
+    ///
+    /// See [`std::process::Command::stdout`].
+    pub fn stdout<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Self {
+        self.cmd.stdout(cfg);
         self
     }
 
