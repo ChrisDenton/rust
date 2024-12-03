@@ -1928,6 +1928,7 @@ Windows.Win32.Foundation.LocalFree
 Windows.Win32.Foundation.MAX_PATH
 Windows.Win32.Foundation.NO_ERROR
 Windows.Win32.Foundation.NTSTATUS
+Windows.Win32.Foundation.OBJ_DONT_REPARSE
 Windows.Win32.Foundation.RtlNtStatusToDosError
 Windows.Win32.Foundation.SetHandleInformation
 Windows.Win32.Foundation.SetLastError
@@ -2371,6 +2372,7 @@ Windows.Win32.Storage.FileSystem.OPEN_EXISTING
 Windows.Win32.Storage.FileSystem.PIPE_ACCESS_DUPLEX
 Windows.Win32.Storage.FileSystem.PIPE_ACCESS_INBOUND
 Windows.Win32.Storage.FileSystem.PIPE_ACCESS_OUTBOUND
+Windows.Win32.Storage.FileSystem.PROGRESS_CONTINUE
 Windows.Win32.Storage.FileSystem.READ_CONTROL
 Windows.Win32.Storage.FileSystem.ReadFile
 Windows.Win32.Storage.FileSystem.ReadFileEx
@@ -2468,7 +2470,6 @@ Windows.Win32.System.Kernel.ExceptionContinueExecution
 Windows.Win32.System.Kernel.ExceptionContinueSearch
 Windows.Win32.System.Kernel.ExceptionNestedException
 Windows.Win32.System.Kernel.FLOATING_SAVE_AREA
-Windows.Win32.System.Kernel.OBJ_DONT_REPARSE
 Windows.Win32.System.LibraryLoader.GetModuleFileNameW
 Windows.Win32.System.LibraryLoader.GetModuleHandleA
 Windows.Win32.System.LibraryLoader.GetModuleHandleW
@@ -2603,5 +2604,4 @@ Windows.Win32.System.Threading.WaitForMultipleObjects
 Windows.Win32.System.Threading.WaitForSingleObject
 Windows.Win32.System.Threading.WakeAllConditionVariable
 Windows.Win32.System.Threading.WakeConditionVariable
-Windows.Win32.System.WindowsProgramming.PROGRESS_CONTINUE
 Windows.Win32.UI.Shell.GetUserProfileDirectoryW

@@ -9,7 +9,7 @@ windows_targets::link!("kernel32.dll" "system" fn AddVectoredExceptionHandler(fi
 windows_targets::link!("kernel32.dll" "system" fn CancelIo(hfile : HANDLE) -> BOOL);
 windows_targets::link!("kernel32.dll" "system" fn CloseHandle(hobject : HANDLE) -> BOOL);
 windows_targets::link!("kernel32.dll" "system" fn CompareStringOrdinal(lpstring1 : PCWSTR, cchcount1 : i32, lpstring2 : PCWSTR, cchcount2 : i32, bignorecase : BOOL) -> COMPARESTRING_RESULT);
-windows_targets::link!("kernel32.dll" "system" fn CopyFileExW(lpexistingfilename : PCWSTR, lpnewfilename : PCWSTR, lpprogressroutine : LPPROGRESS_ROUTINE, lpdata : *const core::ffi::c_void, pbcancel : *mut BOOL, dwcopyflags : u32) -> BOOL);
+windows_targets::link!("kernel32.dll" "system" fn CopyFileExW(lpexistingfilename : PCWSTR, lpnewfilename : PCWSTR, lpprogressroutine : LPPROGRESS_ROUTINE, lpdata : *const core::ffi::c_void, pbcancel : *mut BOOL, dwcopyflags : COPYFILE_FLAGS) -> BOOL);
 windows_targets::link!("kernel32.dll" "system" fn CreateDirectoryW(lppathname : PCWSTR, lpsecurityattributes : *const SECURITY_ATTRIBUTES) -> BOOL);
 windows_targets::link!("kernel32.dll" "system" fn CreateEventW(lpeventattributes : *const SECURITY_ATTRIBUTES, bmanualreset : BOOL, binitialstate : BOOL, lpname : PCWSTR) -> HANDLE);
 windows_targets::link!("kernel32.dll" "system" fn CreateFileW(lpfilename : PCWSTR, dwdesiredaccess : u32, dwsharemode : FILE_SHARE_MODE, lpsecurityattributes : *const SECURITY_ATTRIBUTES, dwcreationdisposition : FILE_CREATION_DISPOSITION, dwflagsandattributes : FILE_FLAGS_AND_ATTRIBUTES, htemplatefile : HANDLE) -> HANDLE);
@@ -138,6 +138,15 @@ windows_targets::link!("ws2_32.dll" "system" fn sendto(s : SOCKET, buf : PCSTR, 
 windows_targets::link!("ws2_32.dll" "system" fn setsockopt(s : SOCKET, level : i32, optname : i32, optval : PCSTR, optlen : i32) -> i32);
 windows_targets::link!("ws2_32.dll" "system" fn shutdown(s : SOCKET, how : WINSOCK_SHUTDOWN_HOW) -> i32);
 pub const ABOVE_NORMAL_PRIORITY_CLASS: PROCESS_CREATION_FLAGS = 32768u32;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ACL {
+    pub AclRevision: u8,
+    pub Sbz1: u8,
+    pub AclSize: u16,
+    pub AceCount: u16,
+    pub Sbz2: u16,
+}
 pub type ADDRESS_FAMILY = u16;
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -377,6 +386,8 @@ pub struct CONTEXT {
     pub ExtendedRegisters: [u8; 512],
 }
 pub type CONTEXT_FLAGS = u32;
+pub type COPYFILE_FLAGS = u32;
+pub type COPYPROGRESSROUTINE_PROGRESS = u32;
 pub const CP_UTF8: u32 = 65001u32;
 pub const CREATE_ALWAYS: FILE_CREATION_DISPOSITION = 2u32;
 pub const CREATE_BREAKAWAY_FROM_JOB: PROCESS_CREATION_FLAGS = 16777216u32;
@@ -2754,7 +2765,7 @@ pub type LPPROGRESS_ROUTINE = Option<
         hsourcefile: HANDLE,
         hdestinationfile: HANDLE,
         lpdata: *const core::ffi::c_void,
-    ) -> u32,
+    ) -> COPYPROGRESSROUTINE_PROGRESS,
 >;
 pub type LPPROGRESS_ROUTINE_CALLBACK_REASON = u32;
 pub type LPTHREAD_START_ROUTINE =
@@ -2805,11 +2816,12 @@ pub struct OBJECT_ATTRIBUTES {
     pub Length: u32,
     pub RootDirectory: HANDLE,
     pub ObjectName: *const UNICODE_STRING,
-    pub Attributes: u32,
-    pub SecurityDescriptor: *const core::ffi::c_void,
-    pub SecurityQualityOfService: *const core::ffi::c_void,
+    pub Attributes: OBJECT_ATTRIBUTE_FLAGS,
+    pub SecurityDescriptor: *const SECURITY_DESCRIPTOR,
+    pub SecurityQualityOfService: *const SECURITY_QUALITY_OF_SERVICE,
 }
-pub const OBJ_DONT_REPARSE: i32 = 4096i32;
+pub type OBJECT_ATTRIBUTE_FLAGS = u32;
+pub const OBJ_DONT_REPARSE: OBJECT_ATTRIBUTE_FLAGS = 4096u32;
 pub const OPEN_ALWAYS: FILE_CREATION_DISPOSITION = 4u32;
 pub const OPEN_EXISTING: FILE_CREATION_DISPOSITION = 3u32;
 #[repr(C)]
@@ -2870,7 +2882,8 @@ pub const PROCESS_MODE_BACKGROUND_END: PROCESS_CREATION_FLAGS = 2097152u32;
 pub const PROFILE_KERNEL: PROCESS_CREATION_FLAGS = 536870912u32;
 pub const PROFILE_SERVER: PROCESS_CREATION_FLAGS = 1073741824u32;
 pub const PROFILE_USER: PROCESS_CREATION_FLAGS = 268435456u32;
-pub const PROGRESS_CONTINUE: u32 = 0u32;
+pub const PROGRESS_CONTINUE: COPYPROGRESSROUTINE_PROGRESS = 0u32;
+pub type PSID = *mut core::ffi::c_void;
 pub type PSTR = *mut u8;
 pub type PTIMERAPCROUTINE = Option<
     unsafe extern "system" fn(
@@ -2897,9 +2910,30 @@ pub struct SECURITY_ATTRIBUTES {
 }
 pub const SECURITY_CONTEXT_TRACKING: FILE_FLAGS_AND_ATTRIBUTES = 262144u32;
 pub const SECURITY_DELEGATION: FILE_FLAGS_AND_ATTRIBUTES = 196608u32;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SECURITY_DESCRIPTOR {
+    pub Revision: u8,
+    pub Sbz1: u8,
+    pub Control: SECURITY_DESCRIPTOR_CONTROL,
+    pub Owner: PSID,
+    pub Group: PSID,
+    pub Sacl: *mut ACL,
+    pub Dacl: *mut ACL,
+}
+pub type SECURITY_DESCRIPTOR_CONTROL = u16;
 pub const SECURITY_EFFECTIVE_ONLY: FILE_FLAGS_AND_ATTRIBUTES = 524288u32;
 pub const SECURITY_IDENTIFICATION: FILE_FLAGS_AND_ATTRIBUTES = 65536u32;
 pub const SECURITY_IMPERSONATION: FILE_FLAGS_AND_ATTRIBUTES = 131072u32;
+pub type SECURITY_IMPERSONATION_LEVEL = i32;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SECURITY_QUALITY_OF_SERVICE {
+    pub Length: u32,
+    pub ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL,
+    pub ContextTrackingMode: u8,
+    pub EffectiveOnly: BOOLEAN,
+}
 pub const SECURITY_SQOS_PRESENT: FILE_FLAGS_AND_ATTRIBUTES = 1048576u32;
 pub const SECURITY_VALID_SQOS_FLAGS: FILE_FLAGS_AND_ATTRIBUTES = 2031616u32;
 pub type SEND_RECV_FLAGS = i32;
@@ -3317,6 +3351,7 @@ pub struct XSAVE_FORMAT {
     pub XmmRegisters: [M128A; 8],
     pub Reserved4: [u8; 224],
 }
+
 #[cfg(target_arch = "arm")]
 #[repr(C)]
 pub struct WSADATA {
