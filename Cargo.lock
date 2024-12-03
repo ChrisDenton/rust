@@ -5959,13 +5959,9 @@ dependencies = [
 [[package]]
 name = "windows-bindgen"
 version = "0.58.0"
-source = "git+https://github.com/microsoft/windows-rs.git?rev=30a574a#30a574a122d2d03dff6203f08c81a284114ecb88"
+source = "git+https://github.com/microsoft/windows-rs.git?rev=b541b7de38748440306e5bf199884a4db8337027#b541b7de38748440306e5bf199884a4db8337027"
 dependencies = [
- "proc-macro2",
  "rayon",
- "serde",
- "serde_json",
- "windows-metadata",
 ]
 
 [[package]]
@@ -6010,11 +6006,6 @@ dependencies = [
  "quote",
  "syn 2.0.87",
 ]
-
-[[package]]
-name = "windows-metadata"
-version = "0.58.0"
-source = "git+https://github.com/microsoft/windows-rs.git?rev=30a574a#30a574a122d2d03dff6203f08c81a284114ecb88"
 
 [[package]]
 name = "windows-result"
