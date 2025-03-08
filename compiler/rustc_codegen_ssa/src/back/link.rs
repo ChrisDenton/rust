@@ -172,6 +172,10 @@ pub fn link_binary(
                 }
                 tempfiles_for_stdout_output.push(out_filename);
             }
+        } else if crate_type == CrateType::Staticlib && output_metadata {
+            if sess.opts.prints.iter().any(|p| p.kind == PrintKind::NativeStaticLibs) {
+                metadata_staticlib(sess, &codegen_results);
+            }
         }
     }
 
@@ -262,7 +266,7 @@ pub fn each_linked_rlib(
         match fmts.get(cnum) {
             Some(&Linkage::NotLinked | &Linkage::Dynamic | &Linkage::IncludedFromDylib) => continue,
             Some(_) => {}
-            None => return Err(errors::LinkRlibError::MissingFormat),
+            None => {} //return Err(errors::LinkRlibError::MissingFormat),
         }
         let crate_name = info.crate_name[&cnum];
         let used_crate_source = &info.used_crate_source[&cnum];
@@ -430,6 +434,53 @@ fn link_rlib<'a>(
     }
 
     ab
+}
+
+fn metadata_staticlib(sess: &Session, codegen_results: &CodegenResults) {
+    let mut all_native_libs = vec![];
+
+    let res = each_linked_rlib(
+        &codegen_results.crate_info,
+        Some(CrateType::Staticlib),
+        &mut |cnum, _| {
+            all_native_libs
+                .extend(codegen_results.crate_info.native_libraries[&cnum].iter().cloned());
+        },
+    );
+    if let Err(e) = res {
+        sess.dcx().emit_fatal(e);
+    }
+
+    let crates = codegen_results.crate_info.used_crates.iter();
+
+    let fmts = codegen_results
+        .crate_info
+        .dependency_formats
+        .get(&CrateType::Staticlib)
+        .expect("no dependency formats for staticlib");
+
+    let mut all_rust_dylibs = vec![];
+    for &cnum in crates {
+        let Some(Linkage::Dynamic) = fmts.get(cnum) else {
+            continue;
+        };
+        let crate_name = codegen_results.crate_info.crate_name[&cnum];
+        let used_crate_source = &codegen_results.crate_info.used_crate_source[&cnum];
+        if let Some((path, _)) = &used_crate_source.dylib {
+            all_rust_dylibs.push(&**path);
+        } else if used_crate_source.rmeta.is_some() {
+            sess.dcx().emit_fatal(errors::LinkRlibError::OnlyRmetaFound { crate_name });
+        } else {
+            sess.dcx().emit_fatal(errors::LinkRlibError::NotFound { crate_name });
+        }
+    }
+
+    all_native_libs.extend_from_slice(&codegen_results.crate_info.used_libraries);
+    for print in &sess.opts.prints {
+        if print.kind == PrintKind::NativeStaticLibs {
+            print_native_static_libs(sess, &print.out, &all_native_libs, &all_rust_dylibs);
+        }
+    }
 }
 
 /// Create a static archive.
