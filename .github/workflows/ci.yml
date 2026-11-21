@@ -205,7 +205,7 @@ jobs:
         run: rm $(which link.exe) || true
 
       - name: Workaroud for \#165953
-        if: ${{ contains(matrix.name, 'aarch64-msvc') }}
+        if: ${{ contains(matrix.name, 'msvc') }}
         shell: pwsh -Command $ErrorActionPreference='stop'; $PSNativeCommandUseErrorActionPreference=$true; & '{0}'
         run: src\ci\scripts\aarch64-msvc-workaround.ps1
 
